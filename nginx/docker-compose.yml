@@ -1,21 +1,24 @@
 services:
-  proxy:
+  nginx:
     image: jwilder/nginx-proxy
     networks:
-      - keycloak-network
+      - default
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - /var/run/docker.sock:/tmp/docker.sock:ro
-      - ./data/conf.d/nginx-proxy.conf:/etc/nginx/conf.d/nginx-proxy.conf:ro
+      - ./data/conf.d:/etc/nginx/conf.d
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
     depends_on:
       - keycloak
+    command: '/bin/sh -c ''while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g "daemon off;"'''
 
   postgres:
     image: postgres
     networks:
-      - keycloak-network
+      - default
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
@@ -26,7 +29,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:latest
     networks:
-      - keycloak-network
+      - default
     environment:
       DB_VENDOR: POSTGRES
       DB_ADDR: postgres
@@ -41,8 +44,16 @@ services:
     depends_on:
       - postgres
 
+  certbot:
+    image: certbot/certbot
+    restart: unless-stopped
+    volumes:
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
 networks:
-  keycloak-network:
+  default:
     driver: bridge
 
 volumes:
